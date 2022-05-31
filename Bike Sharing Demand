@@ -1,0 +1,118 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import mean_squared_log_error
+from collections import Counter
+#####
+# 讀取數據
+dataDF = pd.read_csv("train.csv")
+#####
+# 資料粗略檢視
+dataDF.head(5)   # 顯示前5行資料
+dataDF.tail(5)   # 顯示後5行
+dataDF.columns   # 檢視列名
+dataDF.info()   # 檢視各欄位的資訊
+dataDF.shape   # 檢視資料集行列分佈，幾行幾列
+dataDF.describe() # 檢視資料的大體情況
+#####
+# 處理丟失的資料
+# 丟失值多到少排序
+total = dataDF.isnull().sum().sort_values(ascending=False)
+print(total)
+# 輸出百分比
+percent =(dataDF.isnull().sum()/dataDF.isnull().count()).sort_values(ascending=False)
+missing_data = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
+missing_data.head(20)
+# 使用中位數填補
+dataDF['atemp'] = dataDF['atemp'].fillna(dataDF['atemp'].median())
+#####
+# 資料統計
+dataDF['season'].value_counts() #統計某一列中各個元素值出現的次數     
+dataDF['season'].skew() # 列出資料的偏斜度    
+dataDF['holiday'].corr(dataDF['workingday']) # 計算兩個列的相關度
+# 計算所有特徵值每兩個之間的相關係數，並作圖表示。
+corrmat = dataDF.corr()#得到相關係數
+f,ax = plt.subplots(figsize = (12,9))
+sns.heatmap(corrmat, vmax = .8, square = True) # 熱點圖
+# 取出相關性最大的前十個，做出熱點圖表示
+k = 10 #number of variables for heatmap
+cols = corrmat.nlargest(k, 'weather')['weather'].index
+cm = np.corrcoef(dataDF[cols].values.T)
+sns.set(font_scale=1.25)
+hm = sns.heatmap(cm, cbar=True, annot=True, square=True, fmt='.2f',     annot_kws={'size': 10}, yticklabels=cols.values,    xticklabels=cols.values)
+plt.show()  
+#####
+# 資料前處理
+labels = []
+for count in dataDF["count"]:
+  if count < 42:
+    labels.append(1)
+  elif 42 <= count < 145:
+    labels.append(2)
+  elif 145 <= count < 284:
+    labels.append(3)
+  else:
+    labels.append(4)
+dataDF["labels"] = pd.Series(labels)
+#####
+# print(dataDF)
+dataDF_data = dataDF[["season", "holiday", "workingday", "weather", "temp", "atemp", "humidity", "windspeed", "casual", "registered"]]
+dataDF_target = dataDF["labels"]
+
+x_train, x_test, y_train, y_test = train_test_split(dataDF_data, dataDF_target, test_size=0.4)
+x_valid, x_test, y_valid, y_test = train_test_split(x_test, y_test, test_size=0.5)
+
+indices = np.random.permutation(len(dataDF_data))
+#####
+# kNN
+knn = KNeighborsClassifier(n_neighbors=10, weights="distance")
+knn.fit(x_train, y_train)
+j = knn.predict(x_valid)
+num2 = 0
+l = knn.predict(x_test)
+for i in range(len(l)):
+  if l[i] == y_test.values[i]:
+    num2 += 1
+num2 /= len(l)
+print("the accuracy of test_data by knn: " + str(num2))
+#####
+# Decision Tree
+dt = DecisionTreeClassifier(random_state=0)
+dt_params = {'max_depth': np.arange(1, 50, 2), 'min_samples_leaf': np.arange(2, 15)}
+gs_dt = GridSearchCV(dt, dt_params, cv=3)
+gs_dt.fit(x_train, y_train)
+a = gs_dt.best_params_
+
+dtr = DecisionTreeClassifier(max_depth=a['max_depth'], min_samples_leaf=a['min_samples_leaf'])
+model = dtr.fit(x_train, y_train)
+y_pred = model.predict(x_test)
+num3 = 0
+for i in range(len(y_pred)):
+  if y_pred[i] == y_test.values[i]:
+    num3 += 1
+num3 /= len(l)
+print("the accuracy of test_data by decision tree: " + str(num3))
+#####
+# Random Forest
+rf = RandomForestClassifier(random_state=0)
+rf_params = {'n_estimators': np.arange(25, 150, 25), 'max_depth': np.arange(1, 11, 2), 'min_samples_leaf': np.arange(2, 15, 3)}
+
+gs_rf = GridSearchCV(rf, rf_params, cv=3)
+gs_rf.fit(x_train, y_train)
+b = gs_rf.best_params_
+
+RF = RandomForestClassifier(n_estimators=b['n_estimators'], max_depth=b['max_depth'], min_samples_leaf=b['min_samples_leaf'], random_state=0)
+model = RF.fit(x_train, y_train)
+y_pred2 = model.predict(x_test)
+num4 = 0
+for i in range(len(y_pred2)):
+  if y_pred2[i] == y_test.values[i]:
+    num4 += 1
+num4 /= len(l)
+print("the accuracy of test_data by random forest: " + str(num4))
